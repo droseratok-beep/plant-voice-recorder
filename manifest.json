@@ -1,8 +1,0 @@
-{
-  "name": "植物記録",
-  "short_name": "植物記録",
-  "start_url": "./",
-  "display": "standalone",
-  "lang": "ja",
-  "description": "音声で植物名を記録し、日付ごとに管理するiPhone用Webアプリ"
-}
