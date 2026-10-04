@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#2e7d32"><meta name="app-version" content="2026-10-04-alias-v2"><title>🌿 植物記録</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#f3f8f4;color:#17351f;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}header{background:#2e7d32;color:white;padding:28px 34px;font-size:30px;font-weight:700}main{max-width:900px;margin:auto;padding:34px}.card{background:white;border-radius:28px;padding:34px;margin-bottom:28px;box-shadow:0 5px 18px #00000012}button{border:0;border-radius:22px;padding:20px 30px;font-size:25px;font-weight:700;color:#17351f;background:#e8f0ea;margin:8px 10px 8px 0}button.primary{display:block;width:100%;background:#2e7d32;color:white;font-size:32px;padding:28px}button.delete{background:#fde8e6;color:#a52a24}input{width:100%;font-size:28px;padding:22px;border:2px solid #ccd5ce;border-radius:18px;margin:10px 0 16px}.status{font-size:21px;line-height:1.55;color:#66736a;margin-top:12px}.message{font-size:24px;line-height:1.5;margin:8px 0}.record{border-top:1px solid #e0e6e1;padding:20px 0}.name{font-size:28px;font-weight:700}.meta{font-size:19px;line-height:1.55;margin:5px 0 12px;color:#536158}.small{font-size:17px;color:#6a756e}h2{margin-top:0}@media(max-width:600px){header{font-size:27px;padding:24px 30px}main{padding:24px 20px}.card{padding:24px;border-radius:25px}button.primary{font-size:27px}input{font-size:25px}}</style></head>
+<body>
+<header>🌿 重要種・植物記録</header>
+<main>
+<section class="card">
+  <h2>調査地域</h2>
+  <select id="region" style="width:100%;font-size:22px;padding:16px;border:2px solid #ccd7cf;border-radius:18px">
+    <option value="徳島県">徳島県</option>
+    <option value="滋賀県">滋賀県</option>
+    <option value="兵庫県">兵庫県</option>
+    <option value="京都府">京都府</option>
+  </select>
+  <p class="small">選択した県と環境省の両方を基準に重要種を判定します。</p>
+</section>
+
+<section class="card">
+  <button class="primary" id="speak">🎙️ 植物名を話す</button>
+  <p id="status">植物名を話してください。</p>
+  <input id="plantName" placeholder="植物名（必要なら修正）">
+</section>
+
+<section class="card" id="speciesInfo" style="display:none">
+  <div id="importantBadge" class="notice"></div>
+  <div id="extraFields" style="display:none">
+    <h3>重要種の追加情報</h3>
+    <label>個体数</label>
+    <input id="countInput" inputmode="numeric" type="number" min="1" placeholder="例：3">
+    <button id="countSpeak" style="margin-top:10px">🎙️ 個体数を話す</button>
+    <label style="display:block;margin-top:16px">生育環境</label>
+    <input id="habitatInput" placeholder="例：林床、湿地、河原">
+    <button id="habitatSpeak" style="margin-top:10px">🎙️ 生育環境を話す</button>
+  </div>
+</section>
+
+<section class="card">
+  <p id="gpsStatus" class="small">📍 位置情報：取得準備中</p><button id="save" class="primary">💾 保存</button>
+  <button id="csv" style="width:100%;margin-top:12px">CSV保存（途中でもOK）</button>
+  <hr style="border:0;border-top:1px solid #e0e6e1;margin:22px 0">
+  <h3>漢字→カタカナ変換辞書</h3>
+  <p class="small">登録した変換は日付が変わっても残ります。念のため定期的にバックアップしてください。</p>
+  <button id="backupAliases" style="width:100%">💾 変換辞書をバックアップ</button>
+  <button id="restoreAliases" style="width:100%">♻️ 変換辞書を復元</button>
+  <input id="aliasFile" type="file" accept="application/json,.json" style="display:none">
+  <p id="aliasStatus" class="small"></p>
+  <p class="small">日付が変わると本日の記録は0種から始まります。変換データと過去の記録は保持します。</p>
+</section>
+
+<section class="card">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <h2 style="margin:0">本日の記録</h2>
+    <div class="count" id="count">0種</div>
+  </div>
+  <div id="records"></div>
+</section>
+</main>
+<script>
+const STORAGE_KEY="plant_voice_records_v1";
+const ALIAS_KEY="plant_aliases_v1";
+const ALIAS_KEY_V2="plant_aliases_v2";
+const ALIAS_BACKUP_KEY="plant_aliases_backup_v1";
+const legacyPlantMap={"西洋タンポポ": "セイヨウタンポポ", "西洋たんぽぽ": "セイヨウタンポポ", "西洋蒲公英": "セイヨウタンポポ", "セイヨウタンポポ": "セイヨウタンポポ", "タンポポ": "タンポポ", "たんぽぽ": "タンポポ", "蒲公英": "タンポポ", "桜": "サクラ", "さくら": "サクラ", "サクラ": "サクラ", "山桜": "ヤマザクラ", "やまざくら": "ヤマザクラ", "ヤマザクラ": "ヤマザクラ", "染井吉野": "ソメイヨシノ", "そめいよしの": "ソメイヨシノ", "ソメイヨシノ": "ソメイヨシノ", "紫陽花": "アジサイ", "あじさい": "アジサイ", "アジサイ": "アジサイ", "向日葵": "ヒマワリ", "ひまわり": "ヒマワリ", "ヒマワリ": "ヒマワリ", "菫": "スミレ", "すみれ": "スミレ", "スミレ": "スミレ", "躑躅": "ツツジ", "つつじ": "ツツジ", "ツツジ": "ツツジ", "紅葉": "モミジ", "もみじ": "モミジ", "モミジ": "モミジ", "白詰草": "シロツメクサ", "白詰め草": "シロツメクサ", "しろつめぐさ": "シロツメクサ", "しろつめくさ": "シロツメクサ", "シロツメクサ": "シロツメクサ", "四葉のクローバー": "ヨツバノクローバー", "四つ葉のクローバー": "ヨツバノクローバー", "よつばのくろーばー": "ヨツバノクローバー", "クローバー": "クローバー", "くろーばー": "クローバー", "蓮": "ハス", "はす": "ハス", "ハス": "ハス", "睡蓮": "スイレン", "すいれん": "スイレン", "スイレン": "スイレン", "彼岸花": "ヒガンバナ", "ひがんばな": "ヒガンバナ", "ヒガンバナ": "ヒガンバナ", "曼珠沙華": "マンジュシャゲ", "まんじゅしゃげ": "マンジュシャゲ", "マンジュシャゲ": "マンジュシャゲ", "菜の花": "ナノハナ", "なのはな": "ナノハナ", "ナノハナ": "ナノハナ", "蒲": "ガマ", "がま": "ガマ", "ガマ": "ガマ", "芒": "ススキ", "薄": "ススキ", "すすき": "ススキ", "ススキ": "ススキ", "松": "マツ", "まつ": "マツ", "マツ": "マツ", "杉": "スギ", "すぎ": "スギ", "スギ": "スギ", "檜": "ヒノキ", "桧": "ヒノキ", "ひのき": "ヒノキ", "ヒノキ": "ヒノキ", "竹": "タケ", "たけ": "タケ", "タケ": "タケ", "梅": "ウメ", "うめ": "ウメ", "ウメ": "ウメ", "藤": "フジ", "ふじ": "フジ", "フジ": "フジ", "椿": "ツバキ", "つばき": "ツバキ", "ツバキ": "ツバキ", "百合": "ユリ", "ゆり": "ユリ", "ユリ": "ユリ", "薔薇": "バラ", "ばら": "バラ", "バラ": "バラ", "朝顔": "アサガオ", "あさがお": "アサガオ", "アサガオ": "アサガオ", "紫蘇": "シソ", "しそ": "シソ", "シソ": "シソ", "蕗": "フキ", "ふき": "フキ", "フキ": "フキ", "土筆": "ツクシ", "つくし": "ツクシ", "ツクシ": "ツクシ", "蓬": "ヨモギ", "よもぎ": "ヨモギ", "ヨモギ": "ヨモギ", "葛": "クズ", "くず": "クズ", "クズ": "クズ", "桔梗": "キキョウ", "ききょう": "キキョウ", "キキョウ": "キキョウ", "萩": "ハギ", "はぎ": "ハギ", "ハギ": "ハギ", "藤袴": "フジバカマ", "ふじばかま": "フジバカマ", "フジバカマ": "フジバカマ"};
+function load(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")}catch(e){return []}}
+function aliasKey(s){
+  return String(s||"").trim().normalize("NFKC").replace(/[「」『』［］【】、。,.，．\s]/g,"");
+}
+function loadAliases(){try{
+  let raw=localStorage.getItem(ALIAS_KEY_V2)||localStorage.getItem(ALIAS_KEY);
+  if(!raw) raw=localStorage.getItem(ALIAS_BACKUP_KEY)||"{}";
+  const a=JSON.parse(raw||"{}");
+  const out={};
+  if(a&&typeof a==="object"&&!Array.isArray(a)){
+    for(const [k,v] of Object.entries(a)){const kk=aliasKey(k),vv=String(v||"").trim();if(kk&&vv&&kk!==vv)out[kk]=vv;}
+  }
+  return out;
+}catch(e){return {}}}
+function saveAliases(a){
+  const clean={};
+  for(const [k,v] of Object.entries(a||{})){
+    const key=aliasKey(k), val=String(v||"").trim();
+    if(key&&val&&key!==val) clean[key]=val;
+  }
+  const text=JSON.stringify(clean);
+  localStorage.setItem(ALIAS_KEY_V2,text);
+  localStorage.setItem(ALIAS_KEY,text);
+  localStorage.setItem(ALIAS_BACKUP_KEY,text);
+  return clean;
+}
+function levenshtein(a,b){const dp=Array(b.length+1);for(let j=0;j<=b.length;j++)dp[j]=j;for(let i=1;i<=a.length;i++){let prev=dp[0];dp[0]=i;for(let j=1;j<=b.length;j++){const temp=dp[j];dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=temp;}}return dp[b.length]}
+
+function lookup(name){
+  if(suppliedDatabase[name]) return suppliedDatabase[name];
+  // Try a simple exact katakana-normalized lookup.
+  const n=normalize(name);
+  for(const k of Object.keys(suppliedDatabase)){
+    if(normalize(k)===n)return suppliedDatabase[k];
+  }
+  return null;
+}
+function importantInfo(name){
+  const r=lookup(name);
+  if(!r)return null;
+  const region=document.getElementById("region").value;
+  const env=(r["環境省"]||"").trim();
+  const pref=(r[region]||"").trim();
+  return {env,pref,important:!!(env||pref)};
+}
+function updateSpeciesUI(){
+  const name=normalize(document.getElementById("plantName").value);
+  const box=document.getElementById("speciesInfo"),extra=document.getElementById("extraFields");
+  if(!name){box.style.display="none";return}
+  const info=importantInfo(name);
+  box.style.display="block";
+  if(info && info.important){
+    const parts=[];
+    if(info.env)parts.push("環境省："+info.env);
+    if(info.pref)parts.push(document.getElementById("region").value+"："+info.pref);
+    document.getElementById("importantBadge").innerHTML="⚠️ <strong>重要種</strong>（"+parts.join(" / ")+"）";
+    extra.style.display="block";
+  }else{
+    document.getElementById("importantBadge").textContent=info ? "一般種：選択地域・環境省の重要種指定なし" : "一覧に判定情報がありません。個体数・生育環境の入力は不要です。";
+    extra.style.display="none";
+    document.getElementById("countInput").value="";
+    document.getElementById("habitatInput").value="";
+  }
+}
+function render(){
+  const a=today();document.getElementById("count").textContent=a.length+"種";
+  const box=document.getElementById("records");
+  box.innerHTML=a.length?a.map(r=>`<div class="record"><div class="name">${escapeHtml(r.name)} ${r.important?"⚠️":""}</div>
+  <div class="small">${escapeHtml(r.date)}${r.latitude!==""&&r.latitude!=null?`　📍${escapeHtml(r.latitude)}, ${escapeHtml(r.longitude)}`:""}${r.important?`　個体数:${escapeHtml(r.count)}　生育環境:${escapeHtml(r.habitat)}`:""}</div></div>`).join(""):'<p class="small">本日の記録はありません。</p>';
+}
+function listen(onText){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert("このブラウザでは音声認識が利用できません。入力欄をご利用ください。");return}
+  const r=new SR();r.lang="ja-JP";r.interimResults=false;r.maxAlternatives=3;
+  r.onresult=e=>onText(Array.from(e.results[0]).map(x=>x.transcript));
+  r.onerror=()=>document.getElementById("status").textContent="音声を認識できませんでした。";
+  r.start();
+}
+let lastRecognizedRaw="";
+
+document.getElementById("speak").onclick=()=>{
+  document.getElementById("status").textContent="聞き取り中です……";
+  listen(alts=>{
+    let chosen=normalize(alts[0]||"");
+    let sourceRaw=alts[0]||"";
+    for(const a of alts){const n=normalize(a);if(lookup(n)){chosen=n;sourceRaw=a;break}}
+    lastRecognizedRaw=sourceRaw.trim();
+    // 既知の変換は即保存。未知の漢字は読み方を自動推測できないため、
+    // 次の編集でカタカナに直した時に「音声認識した漢字→修正後カタカナ」を保存します。
+    if(lastRecognizedRaw && lastRecognizedRaw!==chosen && /[一-龯々〆ヵヶ]/.test(lastRecognizedRaw) && /[ァ-ヶー]/.test(chosen)){
+      rememberAlias(lastRecognizedRaw,chosen);
+    }
+    document.getElementById("plantName").value=chosen;
+    document.getElementById("status").textContent="植物名を認識しました。";
+    updateSpeciesUI();
+  });
+};
+document.getElementById("region").onchange=updateSpeciesUI;
+document.getElementById("plantName").oninput=updateSpeciesUI;
+document.getElementById("plantName").onblur=e=>{
+  const current=e.target.value.trim();
+  const normalized=normalize(current);
+  // 音声認識で未知の漢字になった後、ユーザーがカタカナへ直した場合を学習
+  if(lastRecognizedRaw && /[一-龯々〆ヵヶ]/.test(lastRecognizedRaw) && current && current!==lastRecognizedRaw && /[ァ-ヶー]/.test(current)){
+    rememberAlias(lastRecognizedRaw,current);
+  } else if(current && current!==normalized && /[一-龯々〆ヵヶ]/.test(current) && /[ァ-ヶー]/.test(normalized)){
+    rememberAlias(current,normalized);
+  }
+  e.target.value=normalize(current);updateSpeciesUI();
+};
+document.getElementById("countSpeak").onclick=()=>listen(alts=>{
+  const raw=alts[0]||"";const m=raw.match(/\d+/);document.getElementById("countInput").value=m?m[0]:raw.replace(/[^\d]/g,"");
+});
+document.getElementById("habitatSpeak").onclick=()=>listen(alts=>document.getElementById("habitatInput").value=normalize(alts[0]||""));
+document.getElementById("save").onclick=async()=>{
+  const rawName=document.getElementById("plantName").value.trim();
+  if(lastRecognizedRaw && /[一-龯々〆ヵヶ]/.test(lastRecognizedRaw) && /[ァ-ヶー]/.test(rawName) && lastRecognizedRaw!==rawName){rememberAlias(lastRecognizedRaw,rawName);}
+  const name=normalize(rawName);if(!name){alert("植物名を入力してください。");return}
+  const info=importantInfo(name),imp=!!(info&&info.important);
+  document.getElementById("gpsStatus").textContent="📍 位置情報を取得中……";
+  const loc=await getLocation();
+  const rec={name,date:new Date().toLocaleString("ja-JP"),dateKey:dateKey(),important:imp,
+    region:document.getElementById("region").value,envStatus:info?info.env:"",prefStatus:info?info.pref:"",
+    latitude:loc.lat??"",longitude:loc.lon??"",gpsAccuracy:loc.accuracy??""};
+  if(imp){
+    const c=document.getElementById("countInput").value.trim(),h=document.getElementById("habitatInput").value.trim();
+    if(!c||!h){alert("重要種なので、個体数と生育環境を入力してください。");return}
+    rec.count=c;rec.habitat=h;
+  }
+  const a=load();a.push(rec);saveAll(a);
+  if(rawName && rawName!==name && /[一-龯々〆ヵヶ]/.test(rawName)){rememberAlias(rawName,name)}
+  document.getElementById("plantName").value="";document.getElementById("countInput").value="";document.getElementById("habitatInput").value="";
+  document.getElementById("speciesInfo").style.display="none";document.getElementById("status").textContent="保存しました。";render();
+};
+function csvText(){
+  const rows=[["No","植物名","重要種","環境省区分","県区分","調査県","個体数","生育環境","日時","緯度","経度","GPS精度"]];
+  today().forEach((r,i)=>rows.push([i+1,r.name,r.important?"重要種":"",r.envStatus||"",r.prefStatus||"",r.region||"",r.count||"",r.habitat||"",r.date,r.latitude||"",r.longitude||"",r.gpsAccuracy||""]));
+  return "\uFEFF"+rows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\r\n");
+}
+document.getElementById("csv").onclick=async()=>{
+  const a=today();if(!a.length){alert("本日の記録がありません。");return}
+  const blob=new Blob([csvText()],{type:"text/csv;charset=utf-8"}),file=new File([blob],"重要種植物記録_"+dateKey()+".csv",{type:"text/csv"});
+  if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({title:"重要種植物記録",files:[file]});return}catch(e){}}
+  const u=URL.createObjectURL(blob),aTag=document.createElement("a");aTag.href=u;aTag.download=file.name;document.body.appendChild(aTag);aTag.click();aTag.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);
+};
+document.getElementById("backupAliases").onclick=()=>{
+  const aliases=loadAliases();
+  const payload={version:1,createdAt:new Date().toISOString(),aliases};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"});
+  const file=new File([blob],"植物変換辞書_バックアップ_"+dateKey()+".json",{type:"application/json"});
+  if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:"植物変換辞書バックアップ",files:[file]}).catch(()=>{});}
+  else{const u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);}
+  document.getElementById("aliasStatus").textContent="変換辞書をバックアップしました。";
+};
+document.getElementById("restoreAliases").onclick=()=>document.getElementById("aliasFile").click();
+document.getElementById("aliasFile").onchange=async e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  try{const obj=JSON.parse(await f.text());const incoming=obj&&obj.aliases&&typeof obj.aliases==="object"?obj.aliases:obj;
+    if(!incoming||Array.isArray(incoming))throw new Error();
+    const current=loadAliases();Object.assign(current,incoming);saveAliases(current);
+    document.getElementById("aliasStatus").textContent="変換辞書を復元しました（既存の辞書も残しています）。";
+    alert("変換辞書を復元しました。\n既存の辞書は残したまま追加しています。");
+  }catch(err){alert("変換辞書ファイルを読み込めませんでした。");}
+  e.target.value="";
+};
+// 以前の辞書保存領域があれば、アプリ更新時にも保持できるようバックアップ領域へコピーします。
+try{const a=localStorage.getItem(ALIAS_KEY);if(a&&!localStorage.getItem(ALIAS_BACKUP_KEY))localStorage.setItem(ALIAS_BACKUP_KEY,a);}catch(e){}
+
+navigator.geolocation?.getCurrentPosition(
+  p=>document.getElementById("gpsStatus").textContent="📍 位置情報：取得可能",
+  ()=>document.getElementById("gpsStatus").textContent="📍 位置情報：取得できません（設定を確認してください）",
+  {enableHighAccuracy:true,timeout:10000,maximumAge:0}
+);
+render();setInterval(render,60000);
+</script></body></html>
